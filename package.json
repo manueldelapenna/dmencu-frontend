@@ -1,0 +1,45 @@
+{
+  "name": "dmencu-frontend",
+  "version": "0.0.4",
+  "description": "",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean --splitting --sourcemap --external react,react-dom,react-router-dom",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --clean --splitting --watch --sourcemap --external react,react-dom,react-router-dom"
+  },
+  "keywords": [
+    "react",
+    "frontend",
+    "survey",
+    "backend-plus",
+    "frontend-plus-react",
+    "pwa"
+  ],
+  "author": "Codenautas <codenautas@googlegroups.com>",
+  "contributors": [
+    {
+      "name": "Manuel De la Penna",
+      "email": "manueldelapenna@gmail.com"
+    }
+  ],
+  "peerDependencies": { 
+    "react": ">=17.0.0",
+    "react-dom": ">=17.0.0",
+    "react-router-dom": ">=6.0.0",
+    "frontend-plus-react": ">=0.1.16" 
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7", 
+    "@types/react-dom": "^19.2.3",
+    "tsup": "^8.3.0",
+    "typescript": "^5.9.3"
+  }
+}
