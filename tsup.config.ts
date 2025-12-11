@@ -9,7 +9,7 @@ export default defineConfig({
   clean: true,
   splitting: true,
   sourcemap: true,
-  external: ['react', 'react-dom', 'redux-persist', 'react-router-dom', 'frontend-plus-react'],
+  external: ['react', 'react-dom', 'redux-persist', 'react-router-dom', 'frontend-plus-react', 'localforage'],
   // 🎯 Solución al error: Configurar la extensión de salida explícitamente
   outExtension({ format }) {
     if (format === 'esm') {

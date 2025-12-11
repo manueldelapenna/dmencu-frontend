@@ -5,5 +5,5 @@ export type { AppDmencuProps } from './DmencuAppContainer';
 
 export type {WScreenMap, WScreenProps, ResultsOksMap, ResultOkProps, ClientSidesMap, ClientSideProps} from "frontend-plus-react";
 
-// Aquí iría la configuración PWA, pero la omitimos por ahora
-// export { DmencuPwaConfig } from './pwa-config';
+export { OfflineProvider, useOffline } from './contexts/OfflineContext';
+export type { OfflineContextProps, SyncItem } from './contexts/OfflineContext';

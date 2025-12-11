@@ -11,8 +11,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean --splitting --sourcemap --external react,react-dom,react-router-dom",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --clean --splitting --watch --sourcemap --external react,react-dom,react-router-dom"
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean --splitting --sourcemap --external react,react-dom,react-router-dom, localforage",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --clean --splitting --watch --sourcemap --external react,react-dom,react-router-dom, localforage"
   },
   "keywords": [
     "react",
@@ -29,17 +29,23 @@
       "email": "manueldelapenna@gmail.com"
     }
   ],
-  "peerDependencies": { 
+  "peerDependencies": {
+    "frontend-plus-react": ">=0.1.16",
     "react": ">=17.0.0",
     "react-dom": ">=17.0.0",
     "react-router-dom": ">=6.0.0",
-    "frontend-plus-react": ">=0.1.16" 
+    "@mui/icons-material": ">=5.0.0",
+    "@mui/material": ">=5.0.0"
   },
   "devDependencies": {
+    "@types/localforage": "^0.0.33",
     "@types/node": "^24.10.1",
-    "@types/react": "^19.2.7", 
+    "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "tsup": "^8.3.0",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "localforage": "^1.10.0"
   }
 }
