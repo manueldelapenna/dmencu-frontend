@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Route } from 'react-router-dom';
+import localforage from 'localforage'; // Importamos localforage
+
 import { 
     FrontendPlusProviders, 
     FrontendPlusReactRoutes, 
@@ -14,15 +16,17 @@ import {
 import { OfflineProvider } from './contexts/OfflineContext';
 import { DefaultSyncScreen } from './components/DefaultSyncScreen';
 import { DefaultHojaDeRutaScreen } from './components/DefaultHojaDeRutaScreen';
+import { Box } from '@mui/material'; // Usado para el estilo del error
 
+// ----------------------------------------------------------------------
+// CONSTANTES Y TIPOS
+// ----------------------------------------------------------------------
 
+const APP_MODE_STORAGE_KEY = 'dmencu_app_mode';
 
-
-// 1. Agrupamos los componentes PWA reemplazables
 export interface PwaScreens {
-    syncScreen?: React.ComponentType;        // Opcional
-    hojaDeRutaScreen?: React.ComponentType;  // Opcional
-    // configScreen?: React.ComponentType;   // Futuro
+    syncScreen?: React.ComponentType;
+    hojaDeRutaScreen?: React.ComponentType;
 }
 
 type BasePropsOmitted = Omit<BaseAppProps, 'myRoutes' | 'myUnloggedRoutes'>;
@@ -35,9 +39,10 @@ export interface AppDmencuProps extends BasePropsOmitted {
     routesGabineteUnlogged?: React.ReactNode;
 }
 
-const DEFAULT_MODE = 'GABINETE'; 
+// ----------------------------------------------------------------------
+// 2. COMPONENTE DE LÓGICA INTERNA (DmencuLogic)
+// ----------------------------------------------------------------------
 
-// 2. COMPONENTE DE LÓGICA INTERNA
 const DmencuLogic: React.FC<AppDmencuProps> = ({ 
     pwaScreens,
     routesPwa,
@@ -46,57 +51,92 @@ const DmencuLogic: React.FC<AppDmencuProps> = ({
     routesGabineteUnlogged,
     ...baseProps
 }) => {
+    // Validación de props de la librería base
     if ((baseProps as BaseAppProps).myRoutes || (baseProps as BaseAppProps).myUnloggedRoutes) {
         console.error(
             "⛔ ERROR DE IMPLEMENTACIÓN EN DMENCU:\n" +
             "No debes pasar 'myRoutes' o 'myUnloggedRoutes' directamente a <AppDmencu />.\n" +
-            "Usa 'routesGabinete' (para admin), 'routesGabineteUnlogged' (para público) o 'routesPwa'."
+            "Usa 'routesGabinete', 'routesGabineteUnlogged', 'routesPwa' o 'routesPwaUnlogged'."
         );
     }
+    
     const { callApi } = useApiCallWithoutSnackbar(); 
+    
+    // Estados para la lógica de inicio estricta
     const [appMode, setAppMode] = useState<string | null>(null); 
-    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isReady, setIsReady] = useState<boolean>(false);
+    const [hasError, setHasError] = useState<boolean>(false); 
+
     const { myClientSides, myResultsOk, myWScreens} = baseProps;
 
+    // Extensión de componentes (se mantiene igual)
     useEffect(() => {
         if (myClientSides) extendClientSides(myClientSides);
         if (myResultsOk) extendResultsOk(myResultsOk);
         if (myWScreens) extendWScreens(myWScreens);
     }, [myClientSides, myResultsOk, myWScreens]);
 
+    // Función API: Devuelve el modo si es exitoso, null si falla.
     const testApiCall = useCallback(async () => {
         try {
             return await callApi('modo_app_get', {}); 
         } catch (error) {
-            console.error("Error obteniendo modo:", error);
-            return DEFAULT_MODE;
+            console.error("Error obteniendo modo de la API:", error);
+            return null;
         }
     }, [callApi]);
 
+    // Lógica de inicialización estricta (LocalForage + API)
     useEffect(() => {
         let isMounted = true;
-        const init = async () => {
-            setIsLoading(true);
-            try {
-                const modo = await testApiCall();
-                if(isMounted) setAppMode(modo);
-            } catch {
-                if(isMounted) setAppMode(DEFAULT_MODE);
-            } finally {
-                if(isMounted) setIsLoading(false);
+
+        const loadModeStrict = async () => {
+            setHasError(false);
+            
+            // 1. Intentar obtener el modo de la API.
+            const apiMode = await testApiCall();
+            
+            if (!isMounted) return;
+
+            if (apiMode) {
+                // ÉXITO: Modo de la API obtenido. Persistir.
+                await localforage.setItem(APP_MODE_STORAGE_KEY, apiMode);
+                setAppMode(apiMode);
+                setIsReady(true);
+            } else {
+                // 2. La API falló. Intentar cargar el modo persistido.
+                const savedMode = await localforage.getItem<string>(APP_MODE_STORAGE_KEY);
+
+                if (!isMounted) return;
+
+                if (savedMode) {
+                    // FALLBACK ÉXITO: Modo persistido encontrado.
+                    setAppMode(savedMode);
+                    setIsReady(true);
+                } else {
+                    // FALLO TOTAL: Ni API ni persistencia.
+                    console.error("⛔ FALLO CRÍTICO: No se pudo determinar el modo de la aplicación.");
+                    setAppMode(null);
+                    setHasError(true);
+                    setIsReady(true); // Marcamos como ready para renderizar el error.
+                }
             }
         };
-        init();
+
+        loadModeStrict();
         return () => { isMounted = false; };
     }, [testApiCall]);
 
-    //sobrescribo componentes si corresponde
+    // Sobrescribir componentes PWA
     const SyncComp = pwaScreens?.syncScreen || DefaultSyncScreen;
     const HojaRutaComp = pwaScreens?.hojaDeRutaScreen || DefaultHojaDeRutaScreen;
 
-   // Bloque PWA NO PROTEGIDO (Va al slot Unlogged de la base)
+    // ------------------------------------------------------------------
+    // Bloques de rutas por MODO
+    // ------------------------------------------------------------------
+
+    // Bloque PWA NO PROTEGIDO
     const pwaUnloggedRoutesBlock = useMemo(() => (
-        // Las rutas clave de la PWA (Hoja de Ruta, Sincro, etc.)
         <>
             <Route path="/relevamiento">
                 <Route index element={<HojaRutaComp />} /> 
@@ -124,70 +164,92 @@ const DmencuLogic: React.FC<AppDmencuProps> = ({
         </>
     ), [routesGabineteUnlogged]);
 
-    //Bloque Gabinete PROTEGIDO
+    // Bloque Gabinete PROTEGIDO
     const gabineteLoggedRoutesBlock = useMemo(() => (
-        <>            
+        <>            
             <Route path="/reportes" element={<div>gabinete privado prueba</div>} />
-            {/* Rutas adicionales de Gabinete definidas por app final */}
             {routesGabinete} 
         </>
     ), [routesGabinete]);
 
+    // Rutas públicas: Unión de todos los caminos públicos posibles para el AppProvider
     const allPossiblePublicPaths = useMemo(() => {
-        // Rutas públicas base (siempre existen)
         const basePaths = ['/login', '/logout'];
-
-        // Extraer rutas de Gabinete NO logueadas
         const gabinetePaths = extractPathsFromRoutes(gabineteUnloggedRoutesBlock);
-        
-        // Extraer rutas de PWA NO logueadas
-        // (Añadir las rutas base de la PWA que definiste en el bloque)
         const pwaPaths = extractPathsFromRoutes(pwaUnloggedRoutesBlock);
-        
-        // Asegurarse de que las rutas clave de PWA estén incluidas
         const pwaCorePaths = ['/relevamiento', '/relevamiento/sync'];
         
-        // Juntamos y desduplicamos
         const allPaths = [...basePaths, ...gabinetePaths, ...pwaPaths, ...pwaCorePaths];
-        
-        // Usamos Set para desduplicar y convertir de nuevo a array
         return Array.from(new Set(allPaths.flat()));
 
     }, [gabineteUnloggedRoutesBlock, pwaUnloggedRoutesBlock]);
 
-   const finalLoggedRoutes = useMemo(() => {
-        if (appMode === 'GABINETE') {
-            return gabineteLoggedRoutesBlock; 
-        }
-        if (appMode === 'RELEVAMIENTO') {
-            return pwaLoggedRoutesBlock
-        }
-
+    // Rutas protegidas finales (se elige por appMode)
+    const finalLoggedRoutes = useMemo(() => {
+        if (appMode === 'GABINETE') return gabineteLoggedRoutesBlock; 
+        if (appMode === 'RELEVAMIENTO') return pwaLoggedRoutesBlock;
+        return null; 
     }, [appMode, gabineteLoggedRoutesBlock, pwaLoggedRoutesBlock]);
 
+    // Rutas no protegidas finales (se elige por appMode)
     const finalUnloggedRoutes = useMemo(() => {
-        if (appMode === 'GABINETE') {
-            return gabineteUnloggedRoutesBlock;
-        }
-        if (appMode === 'RELEVAMIENTO') { 
-            return pwaUnloggedRoutesBlock;
-        }
-        
-    }, [appMode, gabineteUnloggedRoutesBlock,pwaUnloggedRoutesBlock]);
+        if (appMode === 'GABINETE') return gabineteUnloggedRoutesBlock;
+        if (appMode === 'RELEVAMIENTO') return pwaUnloggedRoutesBlock;
+        return null; 
+    }, [appMode, gabineteUnloggedRoutesBlock, pwaUnloggedRoutesBlock]);
 
-    if (isLoading) return <div>Cargando configuración DMENCU...</div>;
+
+    // ------------------------------------------------------------------
+    // RENDERIZADO CONDICIONAL Y MANEJO DE ERRORES
+    // ------------------------------------------------------------------
+
+    if (!isReady) {
+        return <Box p={3}>Cargando configuración DMENCU...</Box>;
+    }
+
+    if (hasError || !appMode) {
+        // Fallo crítico: Informar al usuario
+        return (
+            <Box 
+                sx={{ 
+                    p: 4, 
+                    textAlign: 'center', 
+                    color: 'error.main', 
+                    border: '1px solid', 
+                    borderColor: 'error.light',
+                    borderRadius: 2,
+                    m: 4,
+                    bgcolor: 'error.background' 
+                }}
+            >
+                <h2>❌ Error de Configuración Crítica</h2>
+                <p>No se pudo determinar el modo de operación (Gabinete o Relevamiento).</p>
+                <p>Verifique su conexión a Internet y asegúrese de que la configuración inicial esté disponible.</p>
+            </Box>
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Renderizado de la aplicación normal
+    // ------------------------------------------------------------------
 
     return (
         <FrontendPlusProviders publicPaths={allPossiblePublicPaths}>
             <OfflineProvider>
-                <FrontendPlusReactRoutes myRoutes={finalLoggedRoutes} myUnloggedRoutes={finalUnloggedRoutes} {...baseProps as BaseAppProps} />
+                <FrontendPlusReactRoutes 
+                    myRoutes={finalLoggedRoutes} 
+                    myUnloggedRoutes={finalUnloggedRoutes} 
+                    {...baseProps as BaseAppProps} 
+                />
             </OfflineProvider>
         </FrontendPlusProviders>
     );
 };
 
+// ----------------------------------------------------------------------
 // 3. COMPONENTE EXPORTADO (WRAPPER)
+// ----------------------------------------------------------------------
+
 export function AppDmencu(props: AppDmencuProps): React.ReactElement {
-    // Ya no necesitas FrontendPlusProviders aquí, solo renderizas DmencuLogic
     return <DmencuLogic {...props} />;
 }
